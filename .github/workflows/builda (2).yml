@@ -1,0 +1,68 @@
+name: Build OpenCode for ARMv7l with Alpine + musl
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-armv7l:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build in Alpine ARMv7 (musl) container
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v $PWD:/workspace \
+            -w /workspace \
+            arm32v7/alpine:3.20 \
+            sh -c "
+              set -e
+
+              echo '=== 1. 安装 Alpine 构建工具 ==='
+              apk update && apk add \
+                curl git build-base cmake python3 \
+                ninja-is-really-ninja \
+                unzip
+
+              echo '=== 2. 安装 Node.js ==='
+              apk add nodejs npm
+
+              echo '=== 3. 安装 Zig ==='
+              # Alpine 没有官方 zig 包，从官网下载静态编译版
+              curl -L https://ziglang.org/download/0.14.0/zig-linux-armv7a-0.14.0.tar.xz -o /tmp/zig.tar.xz
+              tar -xf /tmp/zig.tar.xz -C /tmp
+              export PATH=/tmp/zig-linux-armv7a-0.14.0:\$PATH
+              zig version
+
+              echo '=== 4. 克隆 Bun 源码 ==='
+              git clone --depth 1 --branch bun-v1.3.2 https://github.com/oven-sh/bun.git /tmp/bun
+              cd /tmp/bun
+
+              echo '=== 5. 编译 Bun（musl + armv7） ==='
+              zig build
+
+              echo '=== 6. 安装 Bun ==='
+              cp zig-out/bin/bun /usr/local/bin/bun
+              chmod +x /usr/local/bin/bun
+              bun --version
+
+              echo '=== 7. 构建 OpenCode ==='
+              cd /workspace
+              bun install
+              bun run build
+            "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-armv7l-alpine
+          path: |
+            packages/opencode/dist/
+            packages/opencode/out/
+          if-no-files-found: warn
