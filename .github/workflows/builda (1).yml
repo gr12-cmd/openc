@@ -41,8 +41,7 @@ jobs:
 
               echo '=== 4. 编译 Bun（armv7l，Release 模式） ==='
               # 使用 zig build 编译，-Doptimize=ReleaseFast 开启优化
-              zig build -Doptimize=ReleaseFast
-
+              zig build
               echo '=== 5. 安装编译好的 Bun ==='
               cp zig-out/bin/bun /usr/local/bin/bun
               chmod +x /usr/local/bin/bun
