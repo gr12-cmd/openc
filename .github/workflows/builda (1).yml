@@ -1,0 +1,64 @@
+name: Build OpenCode for ARMv7l with QEMU2
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-armv7l:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build Bun + OpenCode in native ARMv7l environment
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v $PWD:/workspace \
+            -w /workspace \
+            arm32v7/node:20 \
+            bash -c "
+              set -e
+
+              echo '=== 1. 安装基础工具 ==='
+              apt-get update && apt-get install -y \
+                curl unzip git build-essential \
+                cmake python3 ninja-build
+
+              echo '=== 2. 安装 Zig（Bun 的编译器） ==='
+              curl -L https://ziglang.org/download/0.13.0/zig-linux-arm-0.13.0.tar.xz -o /tmp/zig.tar.xz
+              tar -xf /tmp/zig.tar.xz -C /tmp
+              export PATH=/tmp/zig-linux-arm-0.13.0:\$PATH
+              zig version
+
+              echo '=== 3. 克隆 Bun 源码 ==='
+              git clone --depth 1 --branch bun-v1.3.2 https://github.com/oven-sh/bun.git /tmp/bun
+              cd /tmp/bun
+
+              echo '=== 4. 编译 Bun（armv7l，Release 模式） ==='
+              # 使用 zig build 编译，-Doptimize=ReleaseFast 开启优化
+              zig build -Doptimize=ReleaseFast
+
+              echo '=== 5. 安装编译好的 Bun ==='
+              cp zig-out/bin/bun /usr/local/bin/bun
+              chmod +x /usr/local/bin/bun
+              bun --version
+
+              echo '=== 6. 回到工作目录，构建 OpenCode ==='
+              cd /workspace
+              bun install
+              bun run build
+            "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-armv7l
+          path: |
+            packages/opencode/dist/
+            packages/opencode/out/
+          if-no-files-found: warn
