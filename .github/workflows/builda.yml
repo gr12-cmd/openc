@@ -1,0 +1,38 @@
+name: Build OpenCode for ARMv7l with QEMU
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-armv7l:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build in native ARMv7l environment
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v $PWD:/workspace \
+            -w /workspace \
+            arm32v7/node:20 \
+            bash -c "
+              apt-get update && apt-get install -y curl unzip git
+              npm install -g bun
+              bun install
+              bun run build
+            "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-armv7l
+          path: |
+            packages/opencode/dist/
+            packages/opencode/out/
+          if-no-files-found: warn
